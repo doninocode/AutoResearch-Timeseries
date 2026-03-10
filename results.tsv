@@ -1,1 +1,2 @@
 commit	val_sharpe	test_sharpe	val_macro_f1	val_bal_acc	val_loss	test_loss	training_seconds	total_seconds	num_steps	num_params_M	context_length	num_features	status	description
+a4a37b9	0.084904	1.144360	0.372805	0.372284	1.259526	1.319238	180.0	182.8	3941	0.55	512	11	keep	tsla 3-minute baseline
