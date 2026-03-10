@@ -1,18 +1,20 @@
-# autoresearch-futures
+# AutoResearch Timeseries
 
-Automated research harness for predicting 3-trading-day futures moves with an open-source time-series model.
+Automated time-series research harness for trading experiments with open-source forecasting and classification models.
 
-This repo keeps the original autoresearch idea but swaps the language-model stack for a futures classification workflow:
+This repo adapts Karpathy's `autoresearch` loop from short LLM pretraining runs to market prediction. The current scaffold is set up for 3-trading-day direction classification on daily price data, with a fixed prep/evaluation harness and a mutable training surface for agent-driven iteration.
+
+The core idea is simple:
 
 - `prepare.py` is the fixed data and evaluation prep layer.
 - `train.py` is the mutable experiment surface.
 - `program.md` tells an agent how to run the keep/revert loop.
 
-The first baseline is wired to IBM Granite TSPulse classification via `granite-tsfm`.
+The initial baseline uses IBM Granite TSPulse classification via `granite-tsfm`, but the structure is meant for broader time-series research on trading datasets.
 
 ## What This Scaffold Assumes
 
-- Input data is daily futures history.
+- Input data is daily market history.
 - The prediction target is a 3-trading-day move bucket: `down`, `flat`, or `up`.
 - Labels are volatility-scaled so the same target definition can span contracts with different natural vol levels.
 - The primary experiment metric is `val_sharpe` from a simple long/flat/short policy on non-overlapping 3-day windows.
@@ -29,10 +31,10 @@ uv sync
 # Default input is the checked-in TSLA Yahoo daily CSV
 uv run prepare.py
 
-# Option 2: point at your own daily futures CSV or parquet
+# Option 2: point at your own daily market CSV or parquet
 # required columns: timestamp, symbol, close
 # optional columns: open, high, low, volume, open_interest
-# uv run prepare.py --input data/raw/my_futures.csv
+# uv run prepare.py --input data/raw/my_market_data.csv
 
 # Run one 5-minute baseline experiment
 uv run train.py
