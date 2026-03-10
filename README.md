@@ -2,7 +2,7 @@
 
 Automated time-series research harness for trading experiments with open-source forecasting and classification models.
 
-This repo adapts Karpathy's `autoresearch` loop from short LLM pretraining runs to market prediction. The current scaffold is set up for 3-trading-day direction classification on daily price data, with a fixed prep/evaluation harness and a mutable training surface for agent-driven iteration.
+This repo is directly inspired by Andrej Karpathy's original [`autoresearch`](https://github.com/karpathy/autoresearch) project and adapts that edit/run/evaluate/keep-or-revert loop from short LLM pretraining runs to market prediction. The current scaffold is set up for 3-trading-day direction classification on daily price data, with a fixed prep/evaluation harness and a mutable training surface for agent-driven iteration.
 
 The core idea is simple:
 
@@ -11,6 +11,10 @@ The core idea is simple:
 - `program.md` tells an agent how to run the keep/revert loop.
 
 The initial baseline uses IBM Granite TSPulse classification via `granite-tsfm`, but the structure is meant for broader time-series research on trading datasets.
+
+## Credit
+
+The research loop, repo shape, and autonomous experiment pattern are adapted from Andrej Karpathy's original [`karpathy/autoresearch`](https://github.com/karpathy/autoresearch). This repo changes the domain and model stack, but the core workflow idea is his.
 
 ## What This Scaffold Assumes
 
