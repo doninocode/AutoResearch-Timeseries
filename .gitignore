@@ -7,3 +7,8 @@ run.log
 surfaces.txt
 surface-verify-prompt.md
 build-2-closeout.md
+.cache/
+data/raw/*.csv
+!data/raw/tsla_daily_yahoo_2018_to_2026-03-10.csv
+data/raw/*.parquet
+checkpoints/

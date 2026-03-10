@@ -1,147 +1,104 @@
-# autoresearch-mlx
+# autoresearch-futures
 
-Apple Silicon (MLX) port of [Karpathy's autoresearch](https://github.com/karpathy/autoresearch).
+Automated research harness for predicting 3-trading-day futures moves with an open-source time-series model.
 
-Full credit to [@karpathy](https://github.com/karpathy) for the core idea: fixed-time autonomous research loops controlled entirely through `program.md`. This fork preserves every design rule — 5-minute wall-clock budget, single mutable `train.py`, one metric (`val_bpb`), keep/revert via git — and runs natively on Apple Silicon via [MLX](https://github.com/ml-explore/mlx). No PyTorch or CUDA required.
+This repo keeps the original autoresearch idea but swaps the language-model stack for a futures classification workflow:
 
-## Quick start
+- `prepare.py` is the fixed data and evaluation prep layer.
+- `train.py` is the mutable experiment surface.
+- `program.md` tells an agent how to run the keep/revert loop.
 
-Requirements: Apple Silicon Mac (M1/M2/M3/M4), Python 3.10+, uv.
+The first baseline is wired to IBM Granite TSPulse classification via `granite-tsfm`.
 
-```bash
-# Install uv (if needed)
-curl -LsSf https://astral.sh/uv/install.sh | sh
+## What This Scaffold Assumes
 
-# Install dependencies
-uv sync
+- Input data is daily futures history.
+- The prediction target is a 3-trading-day move bucket: `down`, `flat`, or `up`.
+- Labels are volatility-scaled so the same target definition can span contracts with different natural vol levels.
+- The primary experiment metric is `val_sharpe` from a simple long/flat/short policy on non-overlapping 3-day windows.
 
-# Download data and train tokenizer (one-time)
-uv run prepare.py
+This is a starting point, not a finished trading system. The harness is for controlled iteration on features, training, and model settings.
 
-# Run a single training experiment (~7 min including compile + eval)
-uv run train.py
+## Quick Start
 
-# Start autonomous research
-# Point Claude Code (or any agent) at program.md and let it go
-```
-
-## How it works
-
-Same as the original. Three files that matter:
-
-- **`prepare.py`** — data prep, tokenizer, dataloader, evaluation. Not modified.
-- **`train.py`** — model, optimizer, training loop. The agent edits this.
-- **`program.md`** — agent instructions. Point your agent here.
-
-The agent reads `program.md`, modifies `train.py`, runs a 5-minute experiment, checks `val_bpb`, and commits or reverts. Repeat overnight. Wake up to results.
-
-## Results on M1 Mac Studio (48GB)
-
-Starting from the upstream default configuration and running the autoresearch loop:
-
-| Experiment | Change | val_bpb | Action |
-|---|---|---|---|
-| baseline | default config | 2.667 | keep |
-| 1 | halve batch size | 2.589 | keep |
-| 2 | 10x matrix LR | 2.534 | keep |
-| 3 | depth 8 → 4 | 1.808 | keep |
-
-Key finding: Apple Silicon throughput in a 5-minute window favors smaller, faster-training models. The autoresearch loop discovered this automatically — more optimizer steps beat more parameters when compute time is fixed.
-
-## Differences from upstream
-
-- **MLX instead of PyTorch/CUDA.** Native Apple Silicon, unified memory.
-- **AdamW only.** Muon optimizer port is future work.
-- **Smaller eval token budget.** Reduced for faster iteration (~52s eval vs ~11min on full budget). Same `evaluate_bpb` function from `prepare.py`.
-- **~7 min experiment cycle.** 5 min training + ~11s compile + ~52s eval. Expect ~8-9 experiments/hour, ~70 overnight.
-- **MFU reporting is placeholder.** No Apple Silicon FLOPs benchmark exists equivalent to H100_BF16_PEAK_FLOPS. `peak_vram_mb` reports MLX unified memory via
--
-- # autoresearch-mlx
-
-Apple Silicon (MLX) port of [Karpathy's autoresearch](https://github.com/karpathy/autoresearch).
-
-Full credit to [@karpathy](https://github.com/karpathy) for the core idea: fixed-time autonomous research loops controlled entirely through `program.md`. This fork preserves every design rule — 5-minute wall-clock budget, single mutable `train.py`, one metric (`val_bpb`), keep/revert via git — and runs natively on Apple Silicon via [MLX](https://github.com/ml-explore/mlx). No PyTorch or CUDA required.
-
-## Quick start
-
-Requirements: Apple Silicon Mac (M1/M2/M3/M4), Python 3.10+, uv.
+Requirements: Python 3.11+, `uv`, internet access for the first model download.
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync
+
+# Default input is the checked-in TSLA Yahoo daily CSV
 uv run prepare.py
+
+# Option 2: point at your own daily futures CSV or parquet
+# required columns: timestamp, symbol, close
+# optional columns: open, high, low, volume, open_interest
+# uv run prepare.py --input data/raw/my_futures.csv
+
+# Run one 5-minute baseline experiment
 uv run train.py
 ```
 
-Then point Claude Code (or any agent) at `program.md` and let it go.
+## Input Format
 
-## Overnight Results
+The prep step expects one row per symbol per timestamp.
 
-Three machines ran autonomously for 6-12 hours, each discovering its own optimal configuration.
+Required columns:
 
-| Machine | Optimizer | Experiments | Best val_bpb | Improvement |
-|---|---|---|---|---|
-| M4 Max 128GB | AdamW | ~50 | **1.295** | 19% |
-| M4 Max 128GB (#2) | AdamW + surface gates | ~30 | 1.339 | 17% |
-| Mac Mini | Muon + AdamW | 30 | 1.462 | 24% |
+- `timestamp`
+- `symbol`
+- `close`
 
-Upstream H100 reference: val_bpb 0.998 in the same 5-minute budget.
+Optional columns:
 
-### What the Loop Found
+- `open`
+- `high`
+- `low`
+- `volume`
+- `open_interest`
 
-Every machine converged on the same core insight: in a fixed 5-minute window, more optimizer steps beats more parameters.
+If present, the optional columns are turned into extra model features automatically.
 
-- **DEPTH=4 over DEPTH=8.** Half the parameters, roughly 2x the training steps. All three machines converged here.
-- **Smaller batch sizes.** TOTAL_BATCH_SIZE 2^14-2^13 consistently beat 2^17 by fitting more steps into the budget.
-- **Lean MLP.** 3x expansion beat 4x. On the Mac Mini, 2x worked better.
-- **Schedule tuning matters.** WARMDOWN_RATIO and FINAL_LR_FRAC were significant on all machines.
+Current default input:
 
-**Muon on Apple Silicon (first-ever tuning):**
+- `data/raw/tsla_daily_yahoo_2018_to_2026-03-10.csv`
 
-- **NS_STEPS=3 beats NS_STEPS=5.** Fewer Newton-Schulz iterations means faster steps means more total steps.
-- **Muon is hardware-dependent.** On the Mac Mini (constrained compute), Muon was the early breakthrough. On the M4 Max, plain AdamW with more steps still won. Muon makes each step count more — which matters most when you can't get many steps.
+## Files That Matter
 
-The most interesting result: the same loop, given different hardware, found genuinely different optimal configurations. That's exactly what autoresearch is designed to do.
+- `prepare.py`: validates raw data, engineers features, creates labels, and writes a prepared parquet + metadata cache.
+- `train.py`: loads the prepared cache, fine-tunes Granite TSPulse for classification, and reports validation/test metrics.
+- `src/autoresearch_futures/data.py`: fixed feature engineering and window dataset logic.
+- `src/autoresearch_futures/eval.py`: fixed metrics, including the non-overlapping validation Sharpe calculation.
+- `scripts/log_result.py`: appends a `run.log` summary into `results.tsv`.
+- `program.md`: autonomous experiment instructions.
 
-## How it works
+## Output Metric
 
-Three files that matter:
+Each training run prints a summary like:
 
-- **`prepare.py`** — data prep, tokenizer, dataloader, evaluation. Not modified.
-- **`train.py`** — model, optimizer, training loop. The agent edits this. Includes optional Muon with tunable knobs.
-- **`program.md`** — agent instructions. Point your agent here.
-
-## Differences from upstream
-
-- **MLX instead of PyTorch/CUDA.** Native Apple Silicon, unified memory.
-- **Muon included.** Set `USE_MUON = True` to enable. Recommended for memory-constrained hardware.
-- **Smaller eval token budget.** ~52s eval for faster iteration.
-- **~6-7 min experiment cycle.** 8-9 experiments/hour, 60-80 overnight.
-
-## Recommended Defaults
-
-Based on overnight results across three machines:
-
-```python
-DEPTH = 4
-TOTAL_BATCH_SIZE = 2**14
-MLP_EXPANSION = 3
-WARMDOWN_RATIO = 0.3
-FINAL_LR_FRAC = 0.1
-USE_MUON = False          # True for constrained hardware
-NS_STEPS = 3              # if using Muon
+```text
+---
+val_sharpe:       0.423100
+val_macro_f1:     0.401200
+val_bal_acc:      0.487500
+test_sharpe:      0.215700
+training_seconds: 300.1
+total_seconds:    332.4
+num_steps:        412
+num_params_M:     8.7
+context_length:   512
+num_features:     10
+device:           mps
 ```
 
-Starting points. The loop will find better settings for your hardware.
+The autonomous loop should optimize `val_sharpe`. The other metrics are there as guardrails.
 
+## Viability Notes
 
-## Acknowledgments
+This scaffold is viable for overnight research loops if you keep the fixed evaluator honest:
 
-- [Andrej Karpathy](https://github.com/karpathy) — autoresearch and nanochat
-- [scasella/nanochat-mlx](https://github.com/scasella/nanochat-mlx) — MLX GPT and optimizer reference
-- [awni/picochat](https://github.com/awni/picochat) — MLX training patterns
-- [Apple MLX team](https://github.com/ml-explore/mlx)
+- use walk-forward date splits,
+- avoid changing the evaluation code inside the loop,
+- treat `test_sharpe` as a holdout sanity check, not the optimization target,
+- and do not confuse label quality with strategy quality.
 
-## License
-
-MIT. Original copyright preserved. See [LICENSE](LICENSE).
+Before putting real capital behind it, you still need instrument-specific handling for rolls, contract selection, slippage, fees, and execution.
